@@ -1,0 +1,16 @@
+.{
+    .name = .Forker,
+    .version = "0.0.0",
+    .fingerprint = 0x50946b6a60e52730,
+    .minimum_zig_version = "0.14.1",
+
+    .dependencies = .{},
+
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "Sources",
+        "LICENSE",
+        "README.md"
+    }
+}

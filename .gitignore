@@ -1,0 +1,13 @@
+
+.git
+
+# System
+.DS_Store
+
+# File editor
+Session.vim
+*.swp
+
+# Zig
+zig-out
+.zig-cache
