@@ -15,6 +15,7 @@ const ManagedState = enum {
 };
 
 processes: []Executable,
+actions: []Action,
 
 do_restart_workers: bool = false,
 
@@ -29,18 +30,37 @@ pub fn start(forker: *Forker) void {
     std.debug.assert(forker.run_state == .cold);
     global_instance = forker;
 
+    for (forker.actions) |action|
+        shared.register_signal(@as(u6, @intCast(action.signal)), on_signal);
     shared.register_signal(std.posix.SIG.INT, on_signal);
     shared.register_signal(std.posix.SIG.TERM, on_signal);
     shared.register_signal(std.posix.SIG.CHLD, on_signal);
 
-    for (forker.processes) |*exec|
-        forker.spawn_worker(exec) catch forker.exit(1);
+    forker.run_state = .running;
+    log.debug("Forker pid {}", .{ std.posix.system.getpid() });
+
+    for (forker.processes) |*exec| {
+        if (exec.run_state == .running)
+            forker.spawn_worker(exec) catch forker.exit(1);
+    }
+
     forker.process_cycle();
     forker.wait();
 }
 
 pub const Executable = @import("Executable.zig");
 pub const Shell = @import("Shell.zig");
+
+pub const Action = struct {
+
+    pub const Trigger = union(enum) {
+        func: *const fn (*Forker) void,
+        process_idx: usize
+    };
+
+    signal: i32,
+    trigger: Trigger
+};
 
 var global_instance: ?*Forker = null;
 
@@ -59,7 +79,7 @@ fn on_signal(signal: i32) callconv(.C) void {
         std.posix.SIG.CHLD => while (shared.wait()) |result|
             self.on_worker_exit(result.pid, result.status),
 
-        else => {}
+        else => self.perform_triggers(signal)
     }
 }
 
@@ -86,8 +106,10 @@ fn process_cycle(self: *Forker) void {
                 continue;
             }
 
+            const old_run_state = fork.run_state;
+
             // mark worker as terminating if restarting
-            if (do_restart_workers and fork.pid != null and fork.run_state == .running)
+            if (do_restart_workers and fork.pid != null and fork.run_state == .running and fork.mode != .deferred)
                 fork.run_state = .terminating;
 
             // terminate the worker
@@ -98,12 +120,15 @@ fn process_cycle(self: *Forker) void {
             if (fork.pid == null and fork.run_state == .running)
                 self.spawn_worker(fork) catch self.exit(1);
 
+            log.debug("process({}, {}) {} -> {}", .{ fork.mode, run_state, old_run_state, fork.run_state });
+
             // check if event loop done
             if (fork.run_state == .running)
                 all_done = false;
         }
 
         if (all_done) {
+            log.debug("all done, performing exit", .{});
             self.run_state = .exiting;
             self.signal.post();
         }
@@ -161,4 +186,24 @@ fn terminate_worker(worker: *Executable, respawn: bool) void {
     if (worker.pid) |pid|
         std.posix.kill(pid, std.posix.SIG.TERM) catch {};
     worker.run_state = if (respawn) .running else .terminated;
+}
+
+fn perform_triggers(self: *Forker, signal: i32) void {
+    var wake_up = false;
+
+    for (self.actions) |action| {
+        if (action.signal != signal) continue;
+        wake_up = true;
+
+        switch (action.trigger) {
+            .func => |func| func(self),
+            .process_idx => |idx| {
+                if (self.processes[idx].run_state != .terminating)
+                    self.processes[idx].run_state = .running;
+            }
+        }
+    }
+
+    if (wake_up)
+        self.signal.post();
 }

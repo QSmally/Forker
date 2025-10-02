@@ -14,6 +14,33 @@ Forker aims to be the swiss army knife of forking to different processes.
 
 <!-- And don't even get Forker started on restarting (failed) processes. -->
 
+```bash
+$ zig build
+$ zig-out/bin/forker --help
+
+    Forker CLI
+    forker [option ...] [definition [setting ...] ...]
+
+process definition
+    --always expr             execv path
+    --once expr               execv path
+    --on signal internal:fn   internal func
+    --on signal expr          execv path
+
+internal functions
+    internal:restart          restart all processes
+
+process setting
+    ...
+
+options
+    --idle
+    --quiet
+    --doptions
+    --help
+
+```
+
 A few examples to demonstrate the goal of Forker:
 
 ```bash
@@ -29,14 +56,20 @@ $ forker \
     --always "path/to/exec2"
 ```
 
-**(From here on is vaporware for now!)** Forker has a vision.
-
 ```bash
 $ forker \
     --always "path/to/exec" \
     --always "path/to/exec2" \
     --on HUP internal:restart
 ```
+
+```bash
+$ forker \
+    --idle \
+    --on USR1 "path/to/exec"
+```
+
+**(From here on is vaporware for now!)** Forker has a vision.
 
 ```bash
 $ forker \

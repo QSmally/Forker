@@ -2,19 +2,7 @@
 const std = @import("std");
 
 const Forker = @import("forker");
-
-const Config = union(enum) {
-
-    always: Forker.Shell,
-    once: Forker.Shell,
-
-    pub fn executable(self: *const Config) Forker.Executable {
-        return switch (self.*) {
-            .always => |*shell| shell.executable(.always),
-            .once => |*shell| shell.executable(.once)
-        };
-    }
-};
+const frontend = @import("frontend.zig");
 
 // https://github.com/QSmally/QCPU-CLI/blob/6ca9bf79931a5232a7eecfccf6b87f3b3b7305aa/Sources/qcpu.zig#L196
 pub fn Arguments(comptime T: type) type {
@@ -50,13 +38,18 @@ pub fn Arguments(comptime T: type) type {
             return self.next() orelse error.ArgumentExpected;
         }
 
+        fn is_option(self: *ArgumentsType, option: []const u8, argument: []const u8) bool {
+            self.current_option = option;
+            return std.mem.eql(u8, option, argument);
+        }
+
         pub fn parse(self: *ArgumentsType, comptime OptionsType: type, allocator: std.mem.Allocator) !struct {
-            []const []const u8,
-            []const Config,
+            []const frontend.Config,
+            []const frontend.Action,
             OptionsType
         } {
-            var run_args: std.ArrayListUnmanaged([]const u8) = .empty;
-            var run_config: std.ArrayListUnmanaged(Config) = .empty;
+            var run_config: std.ArrayListUnmanaged(frontend.Config) = .empty;
+            var run_actions: std.ArrayListUnmanaged(frontend.Action) = .empty;
             var run_options = OptionsType {};
 
             arg: while (self.next()) |argument| {
@@ -90,24 +83,35 @@ pub fn Arguments(comptime T: type) type {
                     }
                 }
 
-                if (std.mem.eql(u8, argument, "--always")) {
+                if (self.is_option(argument, "--always")) {
                     try run_config.append(allocator, .{ .always = Forker.Shell.init_expr(try self.expect()) });
                     continue :arg;
                 }
 
-                if (std.mem.eql(u8, argument, "--once")) {
+                if (self.is_option(argument, "--once")) {
                     try run_config.append(allocator, .{ .once = Forker.Shell.init_expr(try self.expect()) });
                     continue :arg;
                 }
 
-                if (std.mem.startsWith(u8, argument, "--"))
-                    return error.OptionNotFound;
-                try run_args.append(allocator, argument);
+                if (self.is_option(argument, "--on")) {
+                    const signal = frontend.signal_map.get(try self.expect()) orelse return error.SignalNotFound;
+                    const action_str = try self.expect();
+
+                    const execute: frontend.Action.Execute = if (frontend.func_map.get(action_str)) |internal_func|
+                        .{ .internal = internal_func } else
+                        .{ .shell = Forker.Shell.init_expr(action_str) };
+                    try run_actions.append(allocator, .{
+                        .signal = signal,
+                        .execute = execute });
+                    continue :arg;
+                }
+
+                return error.OptionNotFound;
             }
 
             return .{
-                try run_args.toOwnedSlice(allocator),
                 try run_config.toOwnedSlice(allocator),
+                try run_actions.toOwnedSlice(allocator),
                 run_options };
         }
     };

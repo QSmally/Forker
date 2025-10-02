@@ -24,6 +24,11 @@ const vtable = Forker.Executable.VTable {
     .on_forked = null,
     .on_exit = null };
 pub fn executable(self: *const Shell, mode: Forker.Executable.Mode) Forker.Executable {
+    const initial_state: Forker.Executable.ManagedState = switch (mode) {
+        .once, .always => .running,
+        .deferred => .standby
+    };
+
     return .{
         .context = @constCast(self),
         .vtable = vtable,
@@ -31,7 +36,8 @@ pub fn executable(self: *const Shell, mode: Forker.Executable.Mode) Forker.Execu
             .execv => |execv| std.fs.path.basename(execv[0]),
             .expr => "sh"
         },
-        .mode = mode };
+        .mode = mode,
+        .run_state = initial_state };
 }
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}) {};

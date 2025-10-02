@@ -3,6 +3,7 @@ const std = @import("std");
 
 const Forker = @import("forker");
 const args = @import("args.zig");
+const frontend = @import("frontend.zig");
 
 fn help(raw_writer: anytype) !void {
     var buffer = std.io.bufferedWriter(raw_writer);
@@ -17,6 +18,11 @@ fn help(raw_writer: anytype) !void {
         \\process definition
         \\    --always expr             execv path
         \\    --once expr               execv path
+        \\    --on signal internal:fn   internal func
+        \\    --on signal expr          execv path
+        \\
+        \\internal functions
+        \\    internal:restart          restart all processes
         \\
         \\process setting
         \\    ...
@@ -52,26 +58,22 @@ pub fn main() !u8 {
     const allocator = arena.allocator();
     var arguments = args.Arguments(std.process.ArgIterator).init_second(std.process.args());
 
-    const run_args,
     const run_config,
+    const run_actions,
     const run_options = arguments.parse(Options, allocator) catch |err| {
         switch (err) {
             // error.InvalidCharacter => std.debug.print("error: {s}: invalid numeric '{s}'\n", .{ arguments.current_option, arguments.current_value }),
             // error.Overflow => std.debug.print("error: {s}: {s} doesn't fit in type {s}\n", .{ arguments.current_option, arguments.current_value, arguments.current_type }),
             error.ArgumentExpected => std.debug.print("error: {s}: expected option value\n", .{ arguments.current_option }),
             error.OptionNotFound => std.debug.print("error: {s}: unknown option\n", .{  arguments.current_value }),
+            error.SignalNotFound => std.debug.print("error: {s}: signal {s} is invalid\n", .{ arguments.current_option, arguments.current_value }),
             error.OutOfMemory => std.debug.print("error: out of memory\n", .{})
         }
         return 1;
     };
 
     if (run_options.doptions)
-        std.debug.print("{any} {any}\n", .{ run_args, run_options });
-
-    if (run_args.len != 0) {
-        std.debug.print("error: {} runaway args\n", .{ run_args.len });
-        return 1;
-    }
+        std.debug.print("{any}\n{any}\n{any}\n", .{ run_config, run_actions, run_options });
 
     if (run_options.help) {
         try help(stdout);
@@ -84,15 +86,7 @@ pub fn main() !u8 {
     if (run_options.quiet)
         quiet = true;
 
-    var executables: std.ArrayListUnmanaged(Forker.Executable) = .empty;
-    defer executables.deinit(allocator);
-
-    for (run_config) |*config|
-        try executables.append(allocator, config.executable());
-
-    var forker = Forker { .processes = executables.items };
-    Forker.start(&forker);
-    return forker.exit_code;
+    return try run(allocator, run_config, run_actions);
 }
 
 pub const std_options = std.Options { .logFn = log };
@@ -132,4 +126,41 @@ fn log(
     };
 
     nosuspend stdout.print(prefix ++ message ++ "\n", args_) catch return;
+}
+
+fn run(
+    allocator: std.mem.Allocator,
+    run_config: []const frontend.Config,
+    run_actions: []const frontend.Action
+) !u8 {
+    var executables: std.ArrayListUnmanaged(Forker.Executable) = .empty;
+    defer executables.deinit(allocator);
+
+    var actions: std.ArrayListUnmanaged(Forker.Action) = .empty;
+    defer actions.deinit(allocator);
+
+    for (run_config) |*config| {
+        try executables.append(allocator, config.executable());
+    }
+
+    for (run_actions) |*action| switch (action.execute) {
+        .internal => |func| {
+            try actions.append(allocator, .{
+                .signal = action.signal,
+                .trigger = .{ .func = func } });
+        },
+        .shell => |*execute| {
+            const idx = executables.items.len;
+            try actions.append(allocator, .{
+                .signal = action.signal,
+                .trigger = .{ .process_idx = idx } });
+            try executables.append(allocator, execute.executable(.deferred));
+        }
+    };
+
+    var forker = Forker {
+        .processes = executables.items,
+        .actions = actions.items };
+    Forker.start(&forker);
+    return forker.exit_code;
 }

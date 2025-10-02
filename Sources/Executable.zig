@@ -13,10 +13,11 @@ pub const VTable = struct {
 
 pub const Mode = enum {
     once,
-    always
+    always,
+    deferred
 };
 
-const ManagedState = enum {
+pub const ManagedState = enum {
     standby,
     running,
     terminating,
@@ -27,10 +28,10 @@ context: *anyopaque,
 vtable: VTable,
 name: []const u8,
 mode: Mode,
+run_state: ManagedState,
 
 pid: ?std.posix.pid_t = null,
 started_at_ms: ?i64 = null,
-run_state: ManagedState = .running,
 exit_sync: std.Thread.Semaphore = .{},
 
 /// In the forked context.
@@ -51,8 +52,12 @@ pub fn on_forked(self: *Executable, forker: *Forker) void {
 pub fn on_exit(self: *Executable, forker: *Forker) void {
     self.pid = null;
 
-    if (self.mode == .once)
-        self.run_state = .terminated;
+    self.run_state = switch (self.mode) {
+        .once => .terminated,
+        .always => .running, // respawn
+        .deferred => .standby
+    };
+
     if (self.vtable.on_exit) |on_exit_hook|
         on_exit_hook(self.context, forker);
     self.exit_sync.post();
