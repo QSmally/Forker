@@ -154,6 +154,8 @@ fn run(
 
         while (try stdin.readUntilDelimiterOrEofAlloc(allocator, '\n', std.math.maxInt(usize))) |line| {
             defer allocator.free(line);
+            if (line.len == 0) continue;
+
             const pipe = try std.posix.pipe();
             errdefer std.posix.close(pipe[0]); // read end
             defer std.posix.close(pipe[1]); // write end
