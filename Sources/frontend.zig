@@ -35,8 +35,8 @@ pub const Config = union(enum) {
 
     pub fn executable(self: *const Config) Forker.Executable {
         return switch (self.*) {
-            .always => |*shell| shell.executable(.always),
-            .once => |*shell| shell.executable(.once)
+            .always => |*shell| shell.executable(.always, .shared),
+            .once => |*shell| shell.executable(.once, .shared)
         };
     }
 };

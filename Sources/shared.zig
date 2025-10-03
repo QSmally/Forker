@@ -2,7 +2,7 @@
 const builtin = @import("builtin");
 const std = @import("std");
 
-pub fn register_signal(signal: anytype, handler: anytype) void {
+pub fn register_signal(signal: u6, handler: anytype) void {
     const sigaction = std.posix.Sigaction {
         .handler = .{ .handler = handler },
         .mask = std.posix.empty_sigset,

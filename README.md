@@ -34,6 +34,7 @@ process setting
     ...
 
 options
+    --parallelise string (default none)
     --idle
     --quiet
     --doptions
@@ -64,23 +65,25 @@ $ forker \
 ```
 
 ```bash
-$ forker \
-    --idle \
-    --on USR1 "path/to/exec"
+$ forker --idle --on USR1 "path/to/exec"
+```
+
+```bash
+$ generate_jobs | forker --parallelise "script/to/exec" # one fork per line in stdin
 ```
 
 **(From here on is vaporware for now!)** Forker has a vision.
 
 ```bash
 $ forker \
-    --once "path/to/exec" --retry --max 5 \
-    --once "path/to/exec2" --retry --max 3 --backoff 3s
+    --retry "path/to/exec" --max 5 \
+    --retry "path/to/exec2" --max 3 --backoff 3s
 ```
 
 ```bash
-$ generate_stdin | forker \
+$ forker \
     --always "path/to/exec" \
-    --once "path/to/exec2" --feed-stdin \
+    --once "path/to/exec2" \
     --every 30s "path/to/exec3" --exclusive mylock1 \
     --on USR1 "path/to/exec4" --exclusive mylock1 \
     --on USR2 "path/to/exec5" \
@@ -96,10 +99,6 @@ $ forker \
     --on USR2 internal:restart:foo
 ```
 
-```bash
-$ generate_jobs | forker --parallelise "script/to/exec"
-```
-
 ## Installation
 
 `zig fetch --save git+https://github.com/QSmally/Forker`
@@ -112,8 +111,8 @@ exec.root_module.addImport("forker", libforker.module("forker"));
 
 ```zig
 const shell = Forker.Shell.init(&.{ "/bin/echo", "Hello world!" });
-var execs = [_]Forker.Executable { shell.executable(.once) };
-var forker = Forker { .processes = &execs };
+var execs = [_]Forker.Executable { shell.executable(.once, .shared) };
+var forker = Forker { .processes = &execs, .actions = &.{} };
 
 Forker.start(&forker); // may only be called once
 ```

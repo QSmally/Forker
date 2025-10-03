@@ -24,11 +24,20 @@ pub const ManagedState = enum {
     terminated
 };
 
+pub const StdIn = union(enum) {
+    shared,
+    copy,
+    close,
+    pipe: std.posix.fd_t
+};
+
 context: *anyopaque,
 vtable: VTable,
 name: []const u8,
 mode: Mode,
-run_state: ManagedState,
+
+run_state: ManagedState = .running,
+stdin: StdIn = .copy,
 
 pid: ?std.posix.pid_t = null,
 started_at_ms: ?i64 = null,
@@ -43,6 +52,7 @@ pub fn on_fork(self: *Executable) void {
     std.process.exit(0);
 }
 
+/// Main process context.
 pub fn on_forked(self: *Executable, forker: *Forker) void {
     if (self.vtable.on_forked) |on_forked_hook|
         on_forked_hook(self.context, forker);

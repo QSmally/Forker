@@ -80,18 +80,20 @@ pub fn main() !u8 {
         return 0;
     }
 
-    if (!run_options.idle and run_config.len == 0)
-        return 0;
-
     if (run_options.quiet)
         quiet = true;
+    const debug = std.posix.getenv("DEBUG_ENABLED") orelse "0";
 
-    return try run(allocator, run_config, run_actions);
+    if (std.mem.eql(u8, debug, "1"))
+        quiet = false;
+
+    return try run(allocator, run_config, run_actions, run_options);
 }
 
 pub const std_options = std.Options { .logFn = log };
 
 const Options = struct {
+    parallelise: ?[]const u8 = null,
     idle: bool = false,
     quiet: bool = false,
     doptions: bool = false,
@@ -99,6 +101,10 @@ const Options = struct {
 };
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}) {};
+
+const stdin = std.io
+    .getStdIn()
+    .reader();
 
 const stdout = std.io
     .getStdOut()
@@ -108,16 +114,11 @@ var quiet = false;
 
 fn log(
     comptime level: std.log.Level,
-    comptime scope: @Type(.enum_literal),
+    comptime _: @Type(.enum_literal),
     comptime format: []const u8,
     args_: anytype
 ) void {
     if (quiet) return;
-
-    const message = switch (scope) {
-        // .libforker => "Forker: " ++ format,
-        else => format
-    };
 
     const prefix = switch (level) {
         .debug => "(debug) ",
@@ -125,13 +126,14 @@ fn log(
         else => ""
     };
 
-    nosuspend stdout.print(prefix ++ message ++ "\n", args_) catch return;
+    nosuspend stdout.print(prefix ++ format ++ "\n", args_) catch return;
 }
 
 fn run(
     allocator: std.mem.Allocator,
     run_config: []const frontend.Config,
-    run_actions: []const frontend.Action
+    run_actions: []const frontend.Action,
+    run_options: Options
 ) !u8 {
     var executables: std.ArrayListUnmanaged(Forker.Executable) = .empty;
     defer executables.deinit(allocator);
@@ -142,6 +144,27 @@ fn run(
     for (run_config) |*config| {
         try executables.append(allocator, config.executable());
     }
+
+    if (run_options.parallelise) |expr| {
+        const shell = Forker.Shell.init_expr(expr);
+
+        while (try stdin.readUntilDelimiterOrEofAlloc(allocator, '\n', std.math.maxInt(usize))) |line| {
+            defer allocator.free(line);
+            const pipe = try std.posix.pipe();
+            errdefer std.posix.close(pipe[0]); // read end
+            defer std.posix.close(pipe[1]); // write end
+
+            const file = std.fs.File { .handle = pipe[1] };
+            try file.writeAll(line);
+            try file.writeAll("\n");
+
+            try executables.append(allocator, shell.executable(.once, .{ .pipe = pipe[0] }));
+            std.log.debug("parallelise: {s}", .{ line });
+        }
+    }
+
+    if (!run_options.idle and executables.items.len == 0)
+        return 0;
 
     for (run_actions) |*action| switch (action.execute) {
         .internal => |func| {
@@ -154,7 +177,7 @@ fn run(
             try actions.append(allocator, .{
                 .signal = action.signal,
                 .trigger = .{ .process_idx = idx } });
-            try executables.append(allocator, execute.executable(.deferred));
+            try executables.append(allocator, execute.executable(.deferred, .shared));
         }
     };
 

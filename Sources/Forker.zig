@@ -31,7 +31,7 @@ pub fn start(forker: *Forker) void {
     global_instance = forker;
 
     for (forker.actions) |action|
-        shared.register_signal(@as(u6, @intCast(action.signal)), on_signal);
+        shared.register_signal(@intCast(action.signal), on_signal);
     shared.register_signal(std.posix.SIG.INT, on_signal);
     shared.register_signal(std.posix.SIG.TERM, on_signal);
     shared.register_signal(std.posix.SIG.CHLD, on_signal);
@@ -120,11 +120,16 @@ fn process_cycle(self: *Forker) void {
             if (fork.pid == null and fork.run_state == .running)
                 self.spawn_worker(fork) catch self.exit(1);
 
-            log.debug("process({}, {}) {} -> {}", .{ fork.mode, run_state, old_run_state, fork.run_state });
-
             // check if event loop done
             if (fork.run_state == .running)
                 all_done = false;
+
+            log.debug("{s}({s}, {s}) {s} -> {s}", .{
+                fork.name,
+                @tagName(fork.mode),
+                @tagName(run_state),
+                @tagName(old_run_state),
+                @tagName(fork.run_state) });
         }
 
         if (all_done) {
@@ -160,17 +165,23 @@ fn on_worker_exit(self: *Forker, pid: std.posix.pid_t, status: u32) void {
     @panic("bug: untracked worker process");
 }
 
-fn default_exit(_: i32) callconv(.C) void {
-    std.process.exit(0);
-}
-
 fn spawn_worker(self: *Forker, worker: *Executable) !void {
     const pid = try std.posix.fork();
 
     if (pid == 0) {
-        shared.register_signal(std.posix.SIG.INT, default_exit);
-        shared.register_signal(std.posix.SIG.TERM, default_exit);
-        shared.register_signal(std.posix.SIG.CHLD, std.posix.SIG.IGN);
+        for (self.actions) |action|
+            shared.register_signal(@intCast(action.signal), std.posix.SIG.DFL);
+        shared.register_signal(std.posix.SIG.INT, std.posix.SIG.DFL);
+        shared.register_signal(std.posix.SIG.TERM, std.posix.SIG.DFL);
+        shared.register_signal(std.posix.SIG.CHLD, std.posix.SIG.DFL);
+
+        switch (worker.stdin) {
+            .shared => {},
+            .copy => {}, // TODO
+            .close => std.posix.close(0),
+            .pipe => |new_stdin| try std.posix.dup2(new_stdin, 0) 
+        }
+
         return worker.on_fork();
     }
 
