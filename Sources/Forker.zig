@@ -16,6 +16,7 @@ const ManagedState = enum {
 
 processes: []Executable,
 actions: []Action,
+standby: bool = false,
 
 do_restart_workers: bool = false,
 
@@ -121,7 +122,9 @@ fn process_cycle(self: *Forker) void {
                 self.spawn_worker(fork) catch self.exit(1);
 
             // check if event loop done
-            if (fork.run_state == .running)
+            if (!self.standby and fork.run_state == .running)
+                all_done = false;
+            if (self.standby and (fork.run_state == .running or fork.run_state == .standby))
                 all_done = false;
 
             log.debug("{s}({s}, {s}) {s} -> {s}", .{

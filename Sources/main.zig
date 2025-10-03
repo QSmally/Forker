@@ -60,7 +60,7 @@ pub fn main() !u8 {
 
     const run_config,
     const run_actions,
-    const run_options = arguments.parse(Options, allocator) catch |err| {
+    var run_options = arguments.parse(Options, allocator) catch |err| {
         switch (err) {
             // error.InvalidCharacter => std.debug.print("error: {s}: invalid numeric '{s}'\n", .{ arguments.current_option, arguments.current_value }),
             // error.Overflow => std.debug.print("error: {s}: {s} doesn't fit in type {s}\n", .{ arguments.current_option, arguments.current_value, arguments.current_type }),
@@ -80,6 +80,9 @@ pub fn main() !u8 {
         return 0;
     }
 
+    if (run_options.standby)
+        run_options.idle = true; // implicit
+
     if (run_options.quiet)
         quiet = true;
     const debug = std.posix.getenv("DEBUG_ENABLED") orelse "0";
@@ -95,6 +98,7 @@ pub const std_options = std.Options { .logFn = log };
 const Options = struct {
     parallelise: ?[]const u8 = null,
     idle: bool = false,
+    standby: bool = false,
     quiet: bool = false,
     doptions: bool = false,
     help: bool = false
@@ -183,7 +187,8 @@ fn run(
 
     var forker = Forker {
         .processes = executables.items,
-        .actions = actions.items };
+        .actions = actions.items,
+        .standby = run_options.standby };
     Forker.start(&forker);
     return forker.exit_code;
 }

@@ -35,9 +35,10 @@ process setting
 
 options
     --parallelise string (default none)
-    --idle
-    --quiet
-    --doptions
+    --idle 
+    --standby 
+    --quiet 
+    --doptions 
     --help
 
 ```
