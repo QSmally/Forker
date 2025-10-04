@@ -83,13 +83,18 @@ pub fn Arguments(comptime T: type) type {
                     }
                 }
 
+                if (self.is_option(argument, "--once")) {
+                    try run_config.append(allocator, .{ .once = Forker.Shell.init_expr(try self.expect()) });
+                    continue :arg;
+                }
+
                 if (self.is_option(argument, "--always")) {
                     try run_config.append(allocator, .{ .always = Forker.Shell.init_expr(try self.expect()) });
                     continue :arg;
                 }
 
-                if (self.is_option(argument, "--once")) {
-                    try run_config.append(allocator, .{ .once = Forker.Shell.init_expr(try self.expect()) });
+                if (self.is_option(argument, "--retry")) {
+                    try run_config.append(allocator, .{ .retry = Forker.Shell.init_expr(try self.expect()) });
                     continue :arg;
                 }
 

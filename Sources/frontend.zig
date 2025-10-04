@@ -11,6 +11,7 @@ pub const signal_map = std.StaticStringMap(i32).initComptime(.{
 
 fn restart(forker: *Forker) void {
     forker.do_restart_workers = true;
+    forker.signal.post();
 }
 
 pub const func_map = std.StaticStringMap(*const fn (*Forker) void).initComptime(.{
@@ -30,13 +31,15 @@ pub const Action = struct {
 
 pub const Config = union(enum) {
 
-    always: Forker.Shell,
     once: Forker.Shell,
+    always: Forker.Shell,
+    retry: Forker.Shell,
 
     pub fn executable(self: *const Config) Forker.Executable {
         return switch (self.*) {
+            .once => |*shell| shell.executable(.once, .shared),
             .always => |*shell| shell.executable(.always, .shared),
-            .once => |*shell| shell.executable(.once, .shared)
+            .retry => |*shell| shell.executable(.success, .shared)
         };
     }
 };

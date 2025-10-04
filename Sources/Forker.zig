@@ -50,6 +50,7 @@ pub fn start(forker: *Forker) void {
 }
 
 pub const Executable = @import("Executable.zig");
+pub const JobQueue = @import("JobQueue.zig");
 pub const Shell = @import("Shell.zig");
 
 pub const Action = struct {
@@ -122,9 +123,9 @@ fn process_cycle(self: *Forker) void {
                 self.spawn_worker(fork) catch self.exit(1);
 
             // check if event loop done
-            if (!self.standby and fork.run_state == .running)
+            if (fork.run_state == .running)
                 all_done = false;
-            if (self.standby and (fork.run_state == .running or fork.run_state == .standby))
+            if (self.standby and fork.run_state == .standby)
                 all_done = false;
 
             log.debug("{s}({s}, {s}) {s} -> {s}", .{
@@ -160,7 +161,7 @@ pub fn exit(self: *Forker, exit_code: u8) void {
 fn on_worker_exit(self: *Forker, pid: std.posix.pid_t, status: u32) void {
     for (self.processes) |*fork| {
         if (fork.pid != pid) continue;
-        fork.on_exit(self);
+        fork.on_exit(self, status);
         log.warn("{s} ({}): exited with status {}", .{ fork.name, pid, status });
         return self.signal.post();
     }
@@ -185,15 +186,11 @@ fn spawn_worker(self: *Forker, worker: *Executable) !void {
             .pipe => |new_stdin| try std.posix.dup2(new_stdin, 0) 
         }
 
-        return worker.on_fork();
+        worker.on_fork(); // noreturn
     }
 
     log.info("{s}: start worker process {}", .{ worker.name, pid });
-
-    worker.pid = pid;
-    worker.started_at_ms = std.time.milliTimestamp();
-    worker.exit_sync = .{};
-    worker.on_forked(self);
+    worker.on_forked(self, pid);
 }
 
 fn terminate_worker(worker: *Executable, respawn: bool) void {
@@ -203,12 +200,7 @@ fn terminate_worker(worker: *Executable, respawn: bool) void {
 }
 
 fn perform_triggers(self: *Forker, signal: i32) void {
-    var wake_up = false;
-
-    for (self.actions) |action| {
-        if (action.signal != signal) continue;
-        wake_up = true;
-
+    for (self.actions) |action| if (action.signal == signal) {
         switch (action.trigger) {
             .func => |func| func(self),
             .process_idx => |idx| {
@@ -216,8 +208,5 @@ fn perform_triggers(self: *Forker, signal: i32) void {
                     self.processes[idx].run_state = .running;
             }
         }
-    }
-
-    if (wake_up)
-        self.signal.post();
+    };
 }

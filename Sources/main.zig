@@ -18,6 +18,7 @@ fn help(raw_writer: anytype) !void {
         \\process definition
         \\    --always expr             execv path
         \\    --once expr               execv path
+        \\    --retry expr              execv path
         \\    --on signal internal:fn   internal func
         \\    --on signal expr          execv path
         \\
@@ -62,8 +63,8 @@ pub fn main() !u8 {
     const run_actions,
     var run_options = arguments.parse(Options, allocator) catch |err| {
         switch (err) {
-            // error.InvalidCharacter => std.debug.print("error: {s}: invalid numeric '{s}'\n", .{ arguments.current_option, arguments.current_value }),
-            // error.Overflow => std.debug.print("error: {s}: {s} doesn't fit in type {s}\n", .{ arguments.current_option, arguments.current_value, arguments.current_type }),
+            error.InvalidCharacter => std.debug.print("error: {s}: invalid numeric '{s}'\n", .{ arguments.current_option, arguments.current_value }),
+            error.Overflow => std.debug.print("error: {s}: {s} doesn't fit in type {s}\n", .{ arguments.current_option, arguments.current_value, arguments.current_type }),
             error.ArgumentExpected => std.debug.print("error: {s}: expected option value\n", .{ arguments.current_option }),
             error.OptionNotFound => std.debug.print("error: {s}: unknown option\n", .{  arguments.current_value }),
             error.SignalNotFound => std.debug.print("error: {s}: signal {s} is invalid\n", .{ arguments.current_option, arguments.current_value }),
@@ -83,6 +84,9 @@ pub fn main() !u8 {
     if (run_options.standby)
         run_options.idle = true; // implicit
 
+    if (run_options.jobs == 0)
+        run_options.jobs = std.Thread.getCpuCount() catch 4;
+
     if (run_options.quiet)
         quiet = true;
     const debug = std.posix.getenv("DEBUG_ENABLED") orelse "0";
@@ -97,6 +101,7 @@ pub const std_options = std.Options { .logFn = log };
 
 const Options = struct {
     parallelise: ?[]const u8 = null,
+    jobs: u64 = 0,
     idle: bool = false,
     standby: bool = false,
     quiet: bool = false,
@@ -151,6 +156,10 @@ fn run(
 
     if (run_options.parallelise) |expr| {
         const shell = Forker.Shell.init_expr(expr);
+        var job_queue = Forker.JobQueue {};
+        var jobs: usize = 0;
+
+        std.log.debug("max jobs {}", .{ run_options.jobs });
 
         while (try stdin.readUntilDelimiterOrEofAlloc(allocator, '\n', std.math.maxInt(usize))) |line| {
             defer allocator.free(line);
@@ -164,8 +173,16 @@ fn run(
             try file.writeAll(line);
             try file.writeAll("\n");
 
-            try executables.append(allocator, shell.executable(.once, .{ .pipe = pipe[0] }));
+            var executable = shell.executable(.once, .{ .pipe = pipe[0] });
+            executable.queue = &job_queue;
             std.log.debug("parallelise: {s}", .{ line });
+
+            var list: *std.ArrayListUnmanaged(Forker.Executable) = if (jobs >= run_options.jobs)
+                &job_queue.queue else
+                &executables;
+            try list.append(allocator, executable);
+
+            jobs += 1;
         }
     }
 
@@ -186,6 +203,8 @@ fn run(
             try executables.append(allocator, execute.executable(.deferred, .shared));
         }
     };
+
+    std.log.debug("concurrent jobs {}", .{ executables.items.len });
 
     var forker = Forker {
         .processes = executables.items,

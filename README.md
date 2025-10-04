@@ -8,11 +8,10 @@ Multitool (and libmultitool) for POSIX process hosting.
 Forker is like [process-compose](https://github.com/F1bonacc1/process-compose),
 [supervisord](https://github.com/Supervisor/supervisor)
 and [launchd](https://github.com/apple-oss-distributions/launchd), but is meant to be
-foreground-running, scriptable, and not requiring a configuration file at all.
+foreground-running, scriptable, and configuration-fileless.
 Forker wants to reduce the every-day `$!`, `wait`ing and mass `kill`ing you'd have to do yourself.
-Forker aims to be the swiss army knife of forking to different processes.
-
-<!-- And don't even get Forker started on restarting (failed) processes. -->
+And don't even get Forker started on (re)starting (failed) processes.
+Forker aims to be the swiss army knife of branching to different processes.
 
 ```bash
 $ zig build
@@ -24,6 +23,7 @@ $ zig-out/bin/forker --help
 process definition
     --always expr             execv path
     --once expr               execv path
+    --retry expr              execv path
     --on signal internal:fn   internal func
     --on signal expr          execv path
 
@@ -35,6 +35,7 @@ process setting
 
 options
     --parallelise string (default none)
+    --jobs u64 (default 0)
     --idle 
     --standby 
     --quiet 
@@ -66,11 +67,17 @@ $ forker \
 ```
 
 ```bash
-$ forker --idle --on USR1 "path/to/exec"
+$ forker --retry "path/to/failable"
 ```
 
 ```bash
-$ generate_jobs | forker --parallelise "script/to/exec" # one fork per line in stdin
+$ forker --on USR1 "path/to/exec" # exits immediately; nothing runs
+$ forker --idle --on USR1 "path/to/exec" # exits after single signal fork
+$ forker --standby --on USR1 "path/to/exec" # never exits automatically
+```
+
+```bash
+$ generate_jobs | forker --parallelise "path/to/exec" --jobs 4 # one fork per line in stdin
 ```
 
 **(From here on is vaporware for now!)** Forker has a vision.
