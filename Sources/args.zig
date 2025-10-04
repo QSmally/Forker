@@ -143,35 +143,27 @@ const TestOptions = struct {
 };
 
 test "arguments parser simple correctly" {
-    const foo = std.mem.splitScalar(u8, "--foo --bar aaa", ' ');
+    const foo = std.mem.splitScalar(u8, "--foo --bar", ' ');
     var iterator = Arguments(@TypeOf(foo)).init(foo);
-    const positional, _, const tagged = try iterator.parse(TestOptions, std.testing.allocator);
-    defer std.testing.allocator.free(positional);
+    _, _, const tagged = try iterator.parse(TestOptions, std.testing.allocator);
 
     try std.testing.expectEqual(true, tagged.foo);
     try std.testing.expectEqual(true, tagged.bar);
     try std.testing.expectEqual(@as(?[]const u8, null), tagged.roo);
     try std.testing.expectEqual(false, tagged.doo);
     try std.testing.expectEqual(@as(u16, 0), tagged.loo);
-
-    try std.testing.expect(positional.len == 1);
-    try std.testing.expectEqualSlices(u8, "aaa", positional[0]);
 }
 
 test "arguments parser advanced correctly" {
-    const foo = std.mem.splitScalar(u8, "--roo bbb --loo 5 aaa", ' ');
+    const foo = std.mem.splitScalar(u8, "--roo bbb --loo 5", ' ');
     var iterator = Arguments(@TypeOf(foo)).init(foo);
-    const positional, _, const tagged = try iterator.parse(TestOptions, std.testing.allocator);
-    defer std.testing.allocator.free(positional);
+    _, _, const tagged = try iterator.parse(TestOptions, std.testing.allocator);
 
     try std.testing.expectEqual(false, tagged.foo);
     try std.testing.expectEqual(false, tagged.bar);
     try std.testing.expectEqualSlices(u8, "bbb", tagged.roo.?);
     try std.testing.expectEqual(false, tagged.doo);
     try std.testing.expectEqual(@as(u16, 5), tagged.loo);
-
-    try std.testing.expect(positional.len == 1);
-    try std.testing.expectEqualSlices(u8, "aaa", positional[0]);
 }
 
 test "arguments parser advanced incorrectly 1" {

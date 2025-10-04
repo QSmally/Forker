@@ -206,6 +206,7 @@ fn perform_triggers(self: *Forker, signal: i32) void {
             .process_idx => |idx| {
                 if (self.processes[idx].run_state != .terminating)
                     self.processes[idx].run_state = .running;
+                self.signal.post();
             }
         }
     };
