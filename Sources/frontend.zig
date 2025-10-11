@@ -3,6 +3,17 @@ const std = @import("std");
 
 const Forker = @import("forker");
 
+pub const Options = struct {
+    parallelise: ?[]const u8 = null,
+    jobs: u64 = 0,
+    retries: u64 = 0,
+    idle: bool = false,
+    standby: bool = false,
+    quiet: bool = false,
+    doptions: bool = false,
+    help: bool = false
+};
+
 pub const signal_map = std.StaticStringMap(i32).initComptime(.{
     .{ "HUP", std.posix.SIG.HUP },
     .{ "USR1", std.posix.SIG.USR1 },
@@ -35,11 +46,11 @@ pub const Config = union(enum) {
     always: Forker.Shell,
     retry: Forker.Shell,
 
-    pub fn executable(self: *const Config) Forker.Executable {
+    pub fn executable(self: *const Config, options: *const Options) Forker.Executable {
         return switch (self.*) {
             .once => |*shell| shell.executable(.once, .shared),
             .always => |*shell| shell.executable(.always, .shared),
-            .retry => |*shell| shell.executable(.success, .shared)
+            .retry => |*shell| shell.executable(.{ .retry = options.retries }, .shared)
         };
     }
 };

@@ -12,10 +12,10 @@ pub const VTable = struct {
     on_exit: ?*const fn (*anyopaque, *Forker) void
 };
 
-pub const Mode = enum {
+pub const Mode = union(enum) {
     once,
     always,
-    success,
+    retry: u64,
     deferred
 };
 
@@ -76,7 +76,9 @@ pub fn on_exit(self: *Executable, forker: *Forker, status: u32) void {
     self.run_state = switch (self.mode) {
         .once => .terminated,
         .always => .running, // respawn
-        .success => if (status == 0) .terminated else .running, // respawn if failure
+        .retry => |c| if (status != 0 and (c == 0 or self.instance < c))
+            .running else // respawn if failure and under retries
+            .terminated,
         .deferred => .standby
     };
 

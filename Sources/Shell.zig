@@ -29,7 +29,7 @@ pub fn executable(
     stdin: Forker.Executable.StdIn
 ) Forker.Executable {
     const initial_state: Forker.Executable.ManagedState = switch (mode) {
-        .once, .always, .success => .running,
+        .once, .always, .retry => .running,
         .deferred => .standby
     };
 

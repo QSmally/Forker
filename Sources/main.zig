@@ -32,7 +32,7 @@ fn help(raw_writer: anytype) !void {
     );
 
     inline for (&[_]struct { []const u8, type } {
-        .{ "options", Options }
+        .{ "options", frontend.Options }
     }) |category| {
         try writer.print("{s}\n", .{ category[0] });
 
@@ -61,7 +61,7 @@ pub fn main() !u8 {
 
     const run_config,
     const run_actions,
-    var run_options = arguments.parse(Options, allocator) catch |err| {
+    var run_options = arguments.parse(frontend.Options, allocator) catch |err| {
         switch (err) {
             error.InvalidCharacter => std.debug.print("error: {s}: invalid numeric '{s}'\n", .{ arguments.current_option, arguments.current_value }),
             error.Overflow => std.debug.print("error: {s}: {s} doesn't fit in type {s}\n", .{ arguments.current_option, arguments.current_value, arguments.current_type }),
@@ -99,16 +99,6 @@ pub fn main() !u8 {
 
 pub const std_options = std.Options { .logFn = log };
 
-const Options = struct {
-    parallelise: ?[]const u8 = null,
-    jobs: u64 = 0,
-    idle: bool = false,
-    standby: bool = false,
-    quiet: bool = false,
-    doptions: bool = false,
-    help: bool = false
-};
-
 var gpa = std.heap.GeneralPurposeAllocator(.{}) {};
 
 const stdin = std.io
@@ -142,7 +132,7 @@ fn run(
     allocator: std.mem.Allocator,
     run_config: []const frontend.Config,
     run_actions: []const frontend.Action,
-    run_options: Options
+    run_options: frontend.Options
 ) !u8 {
     var executables: std.ArrayListUnmanaged(Forker.Executable) = .empty;
     defer executables.deinit(allocator);
@@ -151,7 +141,7 @@ fn run(
     defer actions.deinit(allocator);
 
     for (run_config) |*config| {
-        try executables.append(allocator, config.executable());
+        try executables.append(allocator, config.executable(&run_options));
     }
 
     if (run_options.parallelise) |expr| {

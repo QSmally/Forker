@@ -36,10 +36,11 @@ process setting
 options
     --parallelise string (default none)
     --jobs u64 (default 0)
-    --idle 
-    --standby 
-    --quiet 
-    --doptions 
+    --retries u64 (default 0)
+    --idle
+    --standby
+    --quiet
+    --doptions
     --help
 
 ```
@@ -68,6 +69,7 @@ $ forker \
 
 ```bash
 $ forker --retry "path/to/failable"
+$ forker --retry "path/to/failable" --retries 3
 ```
 
 ```bash
@@ -83,9 +85,7 @@ $ generate_jobs | forker --parallelise "path/to/exec" --jobs 4 # one fork per li
 **(From here on is vaporware for now!)** Forker has a vision.
 
 ```bash
-$ forker \
-    --retry "path/to/exec" --max 5 \
-    --retry "path/to/exec2" --max 3 --backoff 3s
+$ forker --retry "path/to/exec2" --retries 3 --backoff 3s
 ```
 
 ```bash
