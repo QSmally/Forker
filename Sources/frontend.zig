@@ -10,6 +10,7 @@ pub const Options = struct {
     idle: bool = false,
     standby: bool = false,
     quiet: bool = false,
+    pid: bool = false,
     doptions: bool = false,
     help: bool = false
 };

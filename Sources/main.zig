@@ -94,6 +94,9 @@ pub fn main() !u8 {
     if (std.mem.eql(u8, debug, "1"))
         quiet = false;
 
+    if (run_options.pid)
+        try stdout.print("{}\n", .{ std.posix.system.getpid() });
+
     return try run(allocator, run_config, run_actions, run_options);
 }
 
@@ -101,13 +104,9 @@ pub const std_options = std.Options { .logFn = log };
 
 var gpa = std.heap.GeneralPurposeAllocator(.{}) {};
 
-const stdin = std.io
-    .getStdIn()
-    .reader();
-
-const stdout = std.io
-    .getStdOut()
-    .writer();
+const stdin = std.io.getStdIn().reader();
+const stdout = std.io.getStdOut().writer();
+const stderr = std.io.getStdErr().writer();
 
 var quiet = false;
 
@@ -125,7 +124,7 @@ fn log(
         else => ""
     };
 
-    nosuspend stdout.print(prefix ++ format ++ "\n", args_) catch return;
+    nosuspend stderr.print(prefix ++ format ++ "\n", args_) catch return;
 }
 
 fn run(

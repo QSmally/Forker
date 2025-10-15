@@ -71,7 +71,8 @@ fn on_signal(signal: i32) callconv(.C) void {
 
     switch (signal) {
         std.posix.SIG.INT,
-        std.posix.SIG.TERM => self.exit(0),
+        std.posix.SIG.TERM,
+        std.posix.SIG.QUIT => self.exit(0),
 
         std.posix.SIG.CHLD => while (shared.wait()) |result|
             self.on_worker_exit(result.pid, result.status),

@@ -40,6 +40,7 @@ options
     --idle
     --standby
     --quiet
+    --pid
     --doptions
     --help
 
@@ -76,6 +77,10 @@ $ forker --retry "path/to/failable" --retries 3
 $ forker --on USR1 "path/to/exec" # exits immediately; nothing runs
 $ forker --idle --on USR1 "path/to/exec" # exits after single signal fork
 $ forker --standby --on USR1 "path/to/exec" # never exits automatically
+```
+
+```bash
+$ forker --idle --pid > wait.pid # block until 'cat wait.pid | xargs kill -QUIT'
 ```
 
 ```bash
