@@ -14,6 +14,12 @@ const ManagedState = enum {
     exited
 };
 
+const host_signals = [_]u6 {
+    std.posix.SIG.INT,
+    std.posix.SIG.TERM,
+    std.posix.SIG.QUIT,
+    std.posix.SIG.CHLD };
+
 processes: []Executable,
 actions: []Action,
 standby: bool = false,
@@ -33,9 +39,8 @@ pub fn start(forker: *Forker) void {
 
     for (forker.actions) |action|
         shared.register_signal(@intCast(action.signal), on_signal);
-    shared.register_signal(std.posix.SIG.INT, on_signal);
-    shared.register_signal(std.posix.SIG.TERM, on_signal);
-    shared.register_signal(std.posix.SIG.CHLD, on_signal);
+    for (&host_signals) |signal|
+        shared.register_signal(signal, on_signal);
 
     forker.run_state = .running;
     log.debug("Forker pid {}", .{ std.posix.system.getpid() });
@@ -49,20 +54,10 @@ pub fn start(forker: *Forker) void {
     forker.wait();
 }
 
+pub const Action = @import("Action.zig");
 pub const Executable = @import("Executable.zig");
 pub const JobQueue = @import("JobQueue.zig");
 pub const Shell = @import("Shell.zig");
-
-pub const Action = struct {
-
-    pub const Trigger = union(enum) {
-        func: *const fn (*Forker) void,
-        process_idx: usize
-    };
-
-    signal: i32,
-    trigger: Trigger
-};
 
 var global_instance: ?*Forker = null;
 
@@ -175,9 +170,8 @@ fn spawn_worker(self: *Forker, worker: *Executable) !void {
     if (pid == 0) {
         for (self.actions) |action|
             shared.register_signal(@intCast(action.signal), std.posix.SIG.DFL);
-        shared.register_signal(std.posix.SIG.INT, std.posix.SIG.DFL);
-        shared.register_signal(std.posix.SIG.TERM, std.posix.SIG.DFL);
-        shared.register_signal(std.posix.SIG.CHLD, std.posix.SIG.DFL);
+        for (&host_signals) |signal|
+            shared.register_signal(signal, std.posix.SIG.DFL);
 
         switch (worker.stdin) {
             .shared => {},
